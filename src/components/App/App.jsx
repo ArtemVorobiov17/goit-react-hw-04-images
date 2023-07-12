@@ -1,4 +1,4 @@
-import { Component } from "react";
+import { useEffect, useState } from "react";
 import { fetchImages } from "servises/api";
 import { Searchbar } from "components/Searchbar/Searchbar";
 import { Modal } from "components/Modal/Modal";
@@ -9,114 +9,102 @@ import Notiflix from "notiflix";
 import css from './App.module.css';
 
 
+
+export const App = () => {
+  
+  const [images, setImages] = useState('');
+  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState('');
+  const [totalPages, setTotalPages] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [largeImage, setLargeImage] = useState('');
  
 
-export class App extends Component {
-  state = {
-    images: [],
-    page: 1,
-    query: '',
-    totalPages: 0,
-    isLoading: false,
-    showModal: false,
-    largeImageURL: '',
+  const openModal = id => {
+    setIsLoading(true);
+    const largeImage = images.find(image => image.id === id);
+    setLargeImage(largeImage.largeImageURL);
+    setIsLoading(false);
+    setShowModal(true);
+    window.addEventListener('keydown', keyDown);
+  };
+  
+  const removeEvent = () => {
+    setShowModal(false);
+    window.removeEventListener('keydown', keyDown);
   };
 
-  componentDidUpdate(_, prevState) {
-    if (
-      this.state.page !== prevState.page ||
-      this.state.query !== prevState.query
-    ) {
-      this.fetchImageArr(prevState);
+  const keyDown = event => {
+    if (event.code === 'Escape') {
+      removeEvent();
     }
   };
 
-  closeModal = () => {
-    this.setState(({ showModal }) => {
-      return { showModal: !showModal };
-    });
+  const onClickBackdrop = event => {
+    if (event.currentTarget === event.target) {
+      removeEvent();
+    }
   };
- 
-
-  openModal = id => {
-  this.setState({ isLoading: true });
-  const largeImage = this.state.images.find(image => image.id === id);
-
-  this.setState({
-    largeImageURL: largeImage.largeImageURL,
-    isLoading: false,
-  });
-
-  this.closeModal();
-};
   
- 
-  
-  handleSubmit = query => {
-    this.setState({ images: [], query: query, page: 1 });
-    if (!query) {
+  const fetchImageArr = async (query, page) => {
+    setIsLoading(true);
+    const { totalHits, hits } = await fetchImages(query, page);
+    const pageCount = totalHits / 12;
+    setTotalPages(pageCount);
+    return hits;
+  };
+
+  const handleSubmit = demand => {
+    setImages([]);
+    setQuery(demand);
+    setPage(1);
+    if (!demand) {
       Notiflix.Notify.warning('Please, enter your request!');
+    } else {
+      fetchImageArr(demand, 1).then(hits => setImages(hits));
+      setIsLoading(false);
     }
   };
 
-  buttonOnClick = () => {
-    this.setState({
-      page: this.state.page + 1,
-    });
+  const buttonOnClick = event => {
+    event.preventDefault();
+    setPage(prevPage => prevPage + 1);
+    
+    fetchImageArr(query, page + 1).then(hits =>
+      setImages(prevState => [...prevState, ...hits])
+    );
+    setIsLoading(false);
   };
 
-  fetchImageArr = async prevState => {
-    try {
-      this.setState({ isLoading: true });
-      const { query, page } = this.state;
-      const { totalHits, hits } = await fetchImages(query, page);
-      const pageCount = totalHits / 12;
-      this.setState({
-        totalPages: pageCount,
-      });
-      if (page !== prevState.page) {
-        this.setState(prevState => ({
-          images: [...prevState.images, ...hits],
-          isLoading: false,
-        }));
-      } else {
-        this.setState({ images: hits, isLoading: false });
-      }
-    } catch (error) {
-      console.log(error);
+  useEffect(() => {
+    if (!query) {
+      setQuery('');
+      setImages([]);
+      return;
     }
-  };
+  }, [query, page]);
 
-  render() {
-    const {
-      images,
-      query,
-      isLoading,
-      page,
-      totalPages,
-      showModal,
-      largeImageURL
-    } = this.state;
+
 
     return (
       <div className={css.container}>
         {isLoading && <Loader />}
-        <Searchbar onSubmit={this.handleSubmit} />
+        <Searchbar onSubmit={handleSubmit} />
         {query !== '' && (
           <>
-            <ImageGallery images={images} openModal={this.openModal} />
-            {page < totalPages && <Button onClick={this.buttonOnClick} />}
+            <ImageGallery images={images} openModal={openModal} />
+            {page < totalPages && <Button onClick={buttonOnClick} />}
           </>
         )}
         {showModal && (
-          <Modal onClose={this.closeModal}>
-            <img src={largeImageURL} alt={query} />
+          <Modal onClose={onClickBackdrop}>
+            <img src={largeImage} alt={query} />
           </Modal>
         )}
       </div>
     );
-  }  
-}
+}  
 
 
 Notiflix.Notify.init({
